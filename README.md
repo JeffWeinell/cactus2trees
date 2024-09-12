@@ -17,11 +17,9 @@ Pipeline for generating locus alignments and gene trees from a whole genome alig
 
 ##### Steps
 
-Convert HAL to TAF
+Convert HAL to TAF.gz
 
 ```
-#### convert .hal --> taf.gz
-
 # HAL alignment (input file)
 HAL=lamps_genomes58_alignment_final.hal
 
