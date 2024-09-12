@@ -31,12 +31,13 @@ TAF=lamps_genomes58_alignment_final.taf.gz
 REFERENCE_GENOME_NAME=Pantherophis-alleghaniensis-PanAll1
 
 # Convert hal to taf.gz with cactus-hal2maf (installed with cactus)
-# you can go straight from hal to maf with this command but the maf file is huge
-# I converted to .taf.gz first because it was easier for me to run cactus-hal2maf on \\
-# the NRP cluster than on the mendel cluster or my laptop, where I run the other steps, and transfering the taf.gz is fast
+# you could convert to maf instead but the maf file is huge
+# I ran cactus-hal2maf on the NRP cluster and all subsquent steps on my laptop or mendel cluster
 cactus-hal2maf ~/jobStore/ $HAL $TAF --refGenome $REFERENCE_GENOME_NAME --chunkSize 500000 --batchCores 20  --noAncestors --dupeMode "all"
 
 ```
+
+<!--
 
 Convert taf.gz to Multiple Alignment Format (.maf) using taffy
 
@@ -56,20 +57,20 @@ MAF=lamps_genomes58_alignment_final.maf
 # create taf index file (taf.gz.tai)
 taffy index -i $TAF
 
-# convert taf.gz --> maf
+# convert taf.gz to maf
 taffy view --inputFile $TAFGZ_PATH_LOCAL --outputFile $MAF_PATH_LOCAL --maf
 
 # create maf index file (maf.tai)
 taffy index -i $MAF
 
+```
+-->
+
+Extract locus alignments from taf.gz at genes in reference genome and save each as a maf
 
 ```
-
-Extract locus alignments at genes of reference genome
-
-```
-# full maf alignment (input file)
-MAF=lamps_genomes58_alignment_final.maf
+# taf alignment (input file)
+TAF=lamps_genomes58_alignment_final.taf.gz
 
 # reference genome used during conversion from .hal
 REFERENCE_GENOME_NAME=Pantherophis-alleghaniensis-PanAll1
@@ -80,11 +81,14 @@ BED=Pantherophis-alleghaniensis-PanAll1.bed
 # bed file with gene features exctracted from full bed (output file)
 BED_GENES=Pantherophis-alleghaniensis-PanAll1_genes.bed
 
-# where to save locus alignments
+# where to save maf locus (genes) alignments
 OUTPUT_DIR=~/genes_scaffolds-softmasked_repeats-softmasked_MAF/
 
 # make bed with gene features
 awk -F'\t' '$8=="gene"{print}' $BED > $BED_GENES
+
+# create taf index file (taf.gz.tai)
+taffy index -i $TAF
 
 # Extract locus alignments and save each as a separate maf file with filename indicating \\
 # genomic coordinates of locus relative to the reference genome
@@ -97,77 +101,70 @@ do
    GENEi=$(echo "$BEDi" | awk '{print $10}')
    echo "i:"$i "region:"$REGIONi "gene:"$GENEi
    GENEi_MAF_PATH=$OUTPUT_DIR"/gene-"$GENEi"-"$(echo $REGIONi | sed 's|:|-|g')".maf"
-   [[ ! -f "$GENEi_MAF_PATH" ]] && taffy view --inputFile $MAF  --outputFile $GENEi_MAF_PATH --maf --region $REFERENCE_GENOME_NAME"."$REGIONi
+   [[ ! -f "$GENEi_MAF_PATH" ]] && taffy view --inputFile $TAF --outputFile $GENEi_MAF_PATH --maf --region $REFERENCE_GENOME_NAME"."$REGIONi
 done
 ```
 
-<!--
-
-Extract locus alignments from whole genome alignment at 10kb sliding windows along reference genome seqs
+Extract locus alignments in 10kb sliding windows along reference genome seqs
 
 ```
+# HAL alignment (input file)
+HAL=lamps_genomes58_alignment_final.hal
 
+# TAF alignment (input file)
+TAF=lamps_genomes58_alignment_final.taf.gz
 
-# Create BED file defining window features (zero based index)
+# Reference genome used during conversion from hal to taf.gz
+REFERENCE_GENOME_NAME=Pantherophis-alleghaniensis-PanAll1
 
+# Where to save bed file with window features in reference genome (output file)
+WINDOWS_BED_PATH=Pantherophis-alleghaniensis-PanAll1_10kb-windows.bed
 
+# directory where window alignments should be saved
+OUTPUT_DIR=~/windows-10kb_scaffolds-softmasked_repeats-softmasked/
 
-REFERENCE_CHROM_BED_PATH=/Users/jeffreyweinell/Documents/research-projects/lamps/TwoBit/Pantherophis-alleghaniensis-PanAll1.bed
+# window widths in base pairs
+WINDOW_SIZE=10000
 
-BED_PATH_OUT="/Users/jeffreyweinell/Documents/lamps/MAF/Pantherophis-alleghaniensis-PanAll1_10kb-windows.bed"
+# two column tab-separated table with sequence names and lengths for the reference genome
+REFCHROMLENGTHS=$(halStats --chromSizes $REFERENCE_GENOME_NAME $HAL | sort -k2 -n -r )
 
-CHROMS=$(awk '{print $1}' "$REFERENCE_CHROM_BED_PATH")
+# sequence names for reference genome (=first column of $REFCHROMLENGTHS )
+CHROMS=$(echo "$REFCHROMLENGTHS" | awk '{print $1}')
 
+# Create BED file with window features
 NUMCHROMS=$(echo "$CHROMS" | wc -l)
-
-for x in $(seq 3 $NUMCHROMS);
+for i in $(seq 1 $NUMCHROMS);
 do
-	CHROMx=$(echo "$CHROMS" | awk -v x=$x 'NR==x{print}')
-	CHROMx_LENGTH=$(awk -v CHROMx=$CHROMx '$1==CHROMx{print $3}' $REFERENCE_CHROM_BED_PATH)
-	zmax=$((CHROMx_LENGTH/10000)) # = number of 10kb windows for CHROMx
-	for z in $(seq 0 $zmax);
-	do
-		R1=$(($z*10000))
-		R2=$(($R1+10000))
-		[[ "$R2" -gt "$CHROMx_LENGTH" ]] && R2=$CHROMx_LENGTH
-		REGIONxz=$CHROMx"\t"$R1"\t"$R2
-		[[ -f "$BED_PATH_OUT" ]] && echo "$REGIONxz" >> $BED_PATH_OUT
-		[[ ! -f "$BED_PATH_OUT" ]] && echo "$REGIONxz" > $BED_PATH_OUT
-	done
+   CHROMi=$(echo "$CHROMS" | awk -v i=$i 'NR==i{print}')
+   CHROMi_LENGTH=$(echo "$REFCHROMLENGTHS" | awk -v CHROMi=$CHROMi '$1==CHROMi{print $2}')
+   CHROMi_NUMWINDOWS=$(($CHROMi_LENGTH/$WINDOW_SIZE))
+   for j in $(seq 0 $CHROMi_NUMWINDOWS);
+   do
+      R1=$(($j*$WINDOW_SIZE))
+      R2=$(($R1+$WINDOW_SIZE))
+      [[ "$R2" -gt "$CHROMi_LENGTH" ]] && R2=$CHROMi_LENGTH
+      REGIONij=$CHROMi"\t"$R1"\t"$R2
+      [[ -f "$WINDOWS_BED_PATH" ]] && echo "$REGIONij" >> $WINDOWS_BED_PATH
+      [[ ! -f "$WINDOWS_BED_PATH" ]] && echo "$REGIONij" > $WINDOWS_BED_PATH
+   done
 done
 
-# Extract alignment blocks in windows
-WINDOWS_BED_PATH="/Users/jeffreyweinell/Documents/lamps/MAF/Pantherophis-alleghaniensis-PanAll1_10kb-windows.bed"
+# create TAF index file if it doesnt already exist
+[[ ! -f ${TAF}".tai" ]] && taffy index -i $TAF
 
-# path to MAF alignment
-# MAF_PATH_LOCAL=/Users/jeffreyweinell/Documents/lamps/cactus/lamps_genomes58_alignment_final.maf
-TAFGZ_PATH_LOCAL=/Users/jeffreyweinell/Documents/lamps/cactus/lamps_genomes58_alignment_final.taf.gz
-
-# create alignment index file if it doesnt exist
-[[ ! -f ${TAFGZ_PATH_LOCAL}".tai" ]] && taffy index -i ${TAFGZ_PATH_LOCAL}
-
-# reference species, which must be the first species in each alignment block and the species in which regions defined in the bed file correspond to
-REFSPECIES=Pantherophis-alleghaniensis-PanAll1
-OUTPUT_DIR=/Users/jeffreyweinell/Documents/lamps/MAF/windows-10kb_scaffolds-softmasked_repeats-softmasked/
-NUMWINDOWS=$(wc -l $WINDOWS_BED_PATH | awk '{print $1}')
-zmax=$(($NUMWINDOWS/1000))
-for z in $(seq 0 $zmax);
+# Extract and save alignment for each window
+NUMLOCI=$(wc -l $WINDOWS_BED_PATH | awk '{print $1}')
+for i in $(seq 1 $NUMLOCI);
 do
-	R1=$(($z*1000))
-	[[ "$R1" -eq 0 ]] && R1=1
-	R2=$(($R1+999))
-	WINDOWS_BED=$(cat $WINDOWS_BED_PATH | awk -v R1=$R1 -v R2=$R2 'NR>=R1 && NR<=R2 {print}')
-	NUMLOCI=$(echo "$WINDOWS_BED" | wc -l)
-	for i in $(seq 1 $NUMLOCI);
-	do
-		REGIONzi=$(echo "$WINDOWS_BED" | awk -v i=$i 'NR==i{print $1":"$2"-"$3}')
-		echo "z:"$z "i:"$i "region:"$REGIONzi
-		WINDOW_MAF_PATH_LOCAL=${OUTPUT_DIR}$(echo $REGIONzi | sed 's|:|-|g')".maf"
-		[[ ! -f "$WINDOW_MAF_PATH_LOCAL" ]] && taffy view --inputFile $TAFGZ_PATH_LOCAL  --outputFile $WINDOW_MAF_PATH_LOCAL --maf --region $REFSPECIES"."$REGIONzi
-	done
+   WINDOWS_BED=$(sed "${i}q;d" $WINDOWS_BED_PATH)
+   REGIONi=$(echo "$WINDOWS_BED" | awk '{print $1":"$2"-"$3}')
+   echo "i:"$i "region:"$REGIONi
+   WINDOWi_MAF_PATH=${OUTPUT_DIR}$(echo $REGIONi | sed 's|:|-|g')".maf"
+   [[ ! -f "$WINDOWi_MAF_PATH" ]] && taffy view --inputFile $TAF --outputFile $WINDOWi_MAF_PATH --maf --region $REFERENCE_GENOME_NAME"."$REGIONi
 done
 ```
 
 
--->
+
 
