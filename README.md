@@ -1,6 +1,6 @@
 # cactus2trees
 
-Pipeline for generating gene trees from a whole genome alignment in Hierarchical Alignment (HAL) Format and produced using Progressive Cactus
+Pipeline for generating locus alignments and gene trees from a whole genome alignment in Hierarchical Alignment (HAL) Format and produced using Progressive Cactus
 
 - Inputs:
   - HAL file with aligned genomes
