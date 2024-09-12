@@ -17,17 +17,14 @@ Pipeline for generating locus alignments and gene trees from a whole genome alig
 
 ##### Steps
 
-Convert HAL to TAF.gz
+Convert .hal to taf.gz using cactus-hal2maf
 
 ```
 # HAL alignment (input file)
 HAL=lamps_genomes58_alignment_final.hal
 
-# TAF alignment (intermediate output file)
+# TAF alignment (output file)
 TAF=lamps_genomes58_alignment_final.taf.gz
-
-# MAF alignment (output file)
-MAF=lamps_genomes58_alignment_final.maf
 
 # Name of genome to use as the reference genome \\
 # Pick an annotated genome that has gene features in a gff/gft/bed feature table file
@@ -41,24 +38,18 @@ cactus-hal2maf ~/jobStore/ $HAL $TAF --refGenome $REFERENCE_GENOME_NAME --chunkS
 
 ```
 
-Convert TAF to Multiple Alignment Format (MAF) and extract subregion alignments
+Convert taf.gz to Multiple Alignment Format (.maf) using taffy
 
 ```
 ### Use the program taffy for taf indexing, conversion to maf, maf indexing, and extracting subregions from maf
 
 ### input/output files
 
-# TAF alignment (input file)
+# taf.gz alignment (input file)
 TAF=lamps_genomes58_alignment_final.taf.gz
 
 # MAF alignment (output file)
 MAF=lamps_genomes58_alignment_final.maf
-
-# bed format feature table with gene and possibly other features annotated in your reference genome (input file)
-BED=Pantherophis-alleghaniensis-PanAll1.bed
-
-# gene feature rows from $BED (output file)
-BED_GENES=Pantherophis-alleghaniensis-PanAll1_genes.bed
 
 ##### do stuff
 
@@ -71,25 +62,29 @@ taffy view --inputFile $TAFGZ_PATH_LOCAL --outputFile $MAF_PATH_LOCAL --maf
 # create maf index file (maf.tai)
 taffy index -i $MAF
 
-# get gene feature rows from reference genome annotations bed file
-awk -F'\t' '$8=="gene"{print}' $BED > $BED_GENES
 
 ```
 
-Extract locus alignments from whole genome alignment at genes of reference genome
+Extract locus alignments at genes of reference genome
 
 ```
-# full alignment (input file)
+# full maf alignment (input file)
 MAF=lamps_genomes58_alignment_final.maf
 
-# reference genome used during converion from HAL
+# reference genome used during conversion from .hal
 REFERENCE_GENOME_NAME=Pantherophis-alleghaniensis-PanAll1
 
-# bed file with gene features in reference genome (input file)
+# bed format feature table with gene and possibly other features annotated in your reference genome (input file)
+BED=Pantherophis-alleghaniensis-PanAll1.bed
+
+# bed file with gene features exctracted from full bed (output file)
 BED_GENES=Pantherophis-alleghaniensis-PanAll1_genes.bed
 
-# Where to save locus alignments
+# where to save locus alignments
 OUTPUT_DIR=~/genes_scaffolds-softmasked_repeats-softmasked_MAF/
+
+# make bed with gene features
+awk -F'\t' '$8=="gene"{print}' $BED > $BED_GENES
 
 # Extract locus alignments and save each as a separate maf file with filename indicating \\
 # genomic coordinates of locus relative to the reference genome
@@ -97,12 +92,12 @@ OUTPUT_DIR=~/genes_scaffolds-softmasked_repeats-softmasked_MAF/
 NUMLOCI=$(cat "$BED_GENES" | wc -l)
 for i in $(seq 1 $NUMLOCI);
 do
-	BEDi=$(sed "${i}q;d" $BED_GENES)
-	REGIONi=$(echo "$BEDi" | awk '{print $1":"$2"-"$3}')
-	GENEi=$(echo "$BEDi" | awk '{print $10}')
-	echo "i:"$i "region:"$REGIONi "gene:"$GENEi
-	GENEi_MAF_PATH=$OUTPUT_DIR"/gene-"$GENEi"-"$(echo $REGIONi | sed 's|:|-|g')".maf"
-	[[ ! -f "$GENEi_MAF_PATH" ]] && taffy view --inputFile $MAF  --outputFile $GENEi_MAF_PATH --maf --region $REFERENCE_GENOME_NAME"."$REGIONi
+   BEDi=$(sed "${i}q;d" $BED_GENES)
+   REGIONi=$(echo "$BEDi" | awk '{print $1":"$2"-"$3}')
+   GENEi=$(echo "$BEDi" | awk '{print $10}')
+   echo "i:"$i "region:"$REGIONi "gene:"$GENEi
+   GENEi_MAF_PATH=$OUTPUT_DIR"/gene-"$GENEi"-"$(echo $REGIONi | sed 's|:|-|g')".maf"
+   [[ ! -f "$GENEi_MAF_PATH" ]] && taffy view --inputFile $MAF  --outputFile $GENEi_MAF_PATH --maf --region $REFERENCE_GENOME_NAME"."$REGIONi
 done
 ```
 
