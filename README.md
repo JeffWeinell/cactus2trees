@@ -17,7 +17,7 @@ Pipeline for generating locus alignments and gene trees from a whole genome alig
 
 ##### Steps
 
-**Convert HAL to TAF**
+Convert HAL to TAF
 
 ```
 #### convert .hal --> taf.gz
@@ -43,7 +43,7 @@ cactus-hal2maf ~/jobStore/ $HAL $TAF --refGenome $REFERENCE_GENOME_NAME --chunkS
 
 ```
 
-**Convert TAF to Multiple Alignment Format (MAF) and extract subregion alignments**
+Convert TAF to Multiple Alignment Format (MAF) and extract subregion alignments
 
 ```
 ### Use the program taffy for taf indexing, conversion to maf, maf indexing, and extracting subregions from maf
