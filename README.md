@@ -6,7 +6,8 @@ Pipeline for generating gene trees from a whole genome alignment in Hierarchical
   - HAL file with aligned genomes
   - BED file with gene features in reference genome
   - BED file with sliding window features in reference genome (steps for creating this are shown below)
-  - (*Often also:*): BED files with masking features (regions of unaligned/gapless genomes to hardmask post alignment)
+  - *maybe*: BED files with mask features for post hoc genome-specific masking
+    - I used this step to hardmask sites in chimera genomes assembled using pseudo-it. After masking, these genomes are no longer chimeric.
 
 - Outputs:
   - locus alignment (one or more alignment blocks in separate fasta file) for each gene/window locus (subregion of full alignment intersecting gene/window features)
