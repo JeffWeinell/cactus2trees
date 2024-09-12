@@ -108,6 +108,8 @@ do
 done
 ```
 
+<!--
+
 Extract locus alignments from whole genome alignment at 10kb sliding windows along reference genome seqs
 
 ```
@@ -174,5 +176,5 @@ done
 ```
 
 
-
+-->
 
