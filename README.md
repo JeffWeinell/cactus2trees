@@ -17,7 +17,7 @@ Pipeline for generating locus alignments and gene trees from a whole genome alig
 
 ### Steps
 
-Convert .hal to taf.gz using cactus-hal2maf
+Convert .hal to taf.gz using the [cactus](https://github.com/ComparativeGenomicsToolkit/cactus) cactus-hal2maf function.
 
 ```
 # HAL alignment (input file)
@@ -106,6 +106,7 @@ done
 ```
 
 Extract locus alignments in 10kb sliding windows along reference genome seqs
+- halStats function requires [HAL](https://github.com/ComparativeGenomicsToolkit/hal), which is included in [cactus](https://github.com/ComparativeGenomicsToolkit/cactus).
 
 ```
 # HAL alignment (input file)
