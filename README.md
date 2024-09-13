@@ -15,7 +15,7 @@ Pipeline for generating locus alignments and gene trees from a whole genome alig
   - maximum-likelihood gene trees inferred for locus alignments with at least four sequences from different genomes
     - if locus alignment has more than one sequence from the same genome (potentially resulting from gene duplications/losses) only one sequence (the first) is retained for tree inference
 
-##### Steps
+### Steps
 
 Convert .hal to taf.gz using cactus-hal2maf
 
