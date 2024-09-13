@@ -241,22 +241,200 @@ rm $MAFs
 
 Sequence-specific alignment masking (if necessary)
 
+Create a huge fasta file with masked versions of your unaligned genomes
+
 ```
+################################# mask-genomes.sh 
 
+#!/bin/sh
+
+# requires HAL (v2.1 tested) and bedtools (v2.29.2 tested)
+
+# path to settings.config
+SETTINGS_PATH=${1}
+
+# load settings (input/output paths) from settings.config 
+source $SETTINGS_PATH
+
+# names of all genomes in the HAL
+GENOME_NAMES=$(halStats --genomes "$HAL_PATH" | sed 's| |\n|g' | sort)
+# genome names excluding ancestral genomes
+GENOME_TIPNAMES=$(echo "$GENOME_NAMES" | grep -v '^Anc[0-9]*')
+# number of tip genomes
+NUMTIPGENOMES=$(echo "$GENOME_TIPNAMES" | wc -l)
+ 
+# (1) get bed intervals to mask for each genome and add to $BED_PATH
+# (2) get sequence lengths for each genome and append to $CHROMLENGTHS_PATH
+# (3) extract each genome and save to $GENOMES_PATH as fasta with UCSC format sequence names
+for i in $(seq 1 $NUMTIPGENOMES);
+do
+	GENOMEi=$(echo "$GENOME_TIPNAMES" | sed "${i}q;d")
+	echo $i $GENOMEi
+
+ 	# test if any intervals to mask in $GENOMEi (0=false, 1=true)
+   	TEST_BEDPATHi=$(awk -v gen=$GENOMEi '$1==gen{print $1}' $BED_CONFIG_PATH | wc -w)
+	[[ "$TEST_BEDPATHi" -gt 1 ]] && echo "genome names in must be unique in "$BED_CONFIG_PATH && exit 1
+     
+ 	# (1) add $GENOMEi BED intervals (if any) to $BED_PATH
+   	[[ "$TEST_BEDPATHi" -eq 0 ]] && BEDPATHi=""
+    	[[ "$TEST_BEDPATHi" -eq 1 ]] && BEDPATHi=$(awk -v gen=$GENOMEi '$1==gen{print $2}' $BED_CONFIG_PATH)
+	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ -f "$BEDPATHi" ]] && [[ -f "$BED_CONFIG_PATH" ]] && awk -v gen=$GENOMEi '{print gen"."$0}' $BEDPATHi > $BED_PATH
+ 	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ -f "$BEDPATHi" ]] && [[ ! -f "$BED_CONFIG_PATH" ]] && awk -v gen=$GENOMEi '{print gen"."$0}' $BEDPATHi > $BED_PATH
+
+ 	# (2) add $GENOMEi sequence names (genomeName.chromosomeName) and lengths to $CHROMLENGTHS_PATH
+   	[[ $i -eq 1 ]] && halStats --chromSizes $GENOMEi $HAL_PATH | awk -v gen=$GENOMEi '{print gen"."$0}' > $CHROMLENGTHS_PATH
+    	[[ $i -gt 1 ]] && halStats --chromSizes $GENOMEi $HAL_PATH | awk -v gen=$GENOMEi '{print gen"."$0}' >> $CHROMLENGTHS_PATH
+
+     	# (3) mask $GENOMEi sequences and add to $GENOMES_PATH
+ 	[[ "$TEST_BEDPATHi" -eq 0 ]] && [[ $i -eq 1 ]] && hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi > $GENOMES_PATH
+  	[[ "$TEST_BEDPATHi" -eq 0 ]] && [[ $i -gt 1 ]] && hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi >> $GENOMES_PATH
+
+  	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ $i -eq 1 ]] && GENOMEi_TEMP_PATH=$(mktemp 2>&1) && 
+              bedtools maskfasta -fi <(hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi) -fo $GENOMEi_TEMP_PATH -bed $BED_PATH && 
+              cp "$GENOMEi_TEMP_PATH" $GENOMES_PATH && rm $GENOMEi_TEMP_PATH
+
+  	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ $i -gt 1 ]] && GENOMEi_TEMP_PATH=$(mktemp 2>&1) && 
+              bedtools maskfasta -fi <(hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi) -fo $GENOMEi_TEMP_PATH -bed $BED_PATH && 
+              cat "$GENOMEi_TEMP_PATH" >> $GENOMES_PATH && rm $GENOMEi_TEMP_PATH
+done
+```
+- code is implemented here: [mask-genomes.sh](https://raw.githubusercontent.com/JeffWeinell/mask-alignment/main/current/mask-genomes.sh)
+
+
+<!--
+````
+############## updated version of batch-mask-alignment.sh that includes code from mask-alignment.sh
+
+# NOTE: zero-length intervals in input MAF are always filtered
+
+### In the future this script will use inputs \\
+# (1) HAL file (instead of fasta with all genomes) \\
+# (2) MAF file generated from the HAL \\
+# (3) BED with intervals to mask in output alignment fasta
+
+module load R/R-4.0.2
+module load Bedtools/bedtools-2.29.2
+
+GENOMES_PATH=
+R_PACKAGES_DIR=
+MASK_ALIGNMENT_RSCRIPT=mask-alignment.R
+
+# file with names of input .maf files
+MAF_NAMES_FILE=genes_maf-filenames.txt
+
+# directory containing the .maf files listed in $MAF_NAMES_FILE
+MAF_DIR_IN=genes_scaffolds-softmasked_repeats-softmasked_MAF
+
+# create temporary file with paths to input files in $MAF_DIR_IN
+MAFs=$(mktemp 2>&1)
+find $MAF_DIR_IN -type f > $MAFs
+
+# output directory where masked fasta alignments are written
+ALN_FA_DIR_OUT=
+
+# first .maf in $MAF_NAMES_FILE to processes
+imin=
+
+# last .maf in $MAF_NAMES_FILE to processes
+imax=
+
+for i in $(seq $imin $imax);
+do
+   # MAFi=$(sed "${i}q;d" $MAF_NAMES_FILE)
+
+   MAFi=$(sed "${i}q;d" $MAFs)
+   FAi=$(echo "$MAFi" | sed 's|.maf$|.fa|g')
+   
+   ALN_MAF_PATH=$MAFi
+   ALN_FAOUT_PATH=$FAi
+
+   ### exit if $ALN_FAOUT_PATH already exists
+   [[ -f "$ALN_FAOUT_PATH" ]] && echo "exiting because "$ALN_FAOUT_PATH" already exists" && exit 0
+   
+   ### temporary files
+   ALN_FA_UNMASKED_PATH=$(mktemp 2>&1)
+   REGIONS_TABLE_PATH_A=$(mktemp 2>&1)
+   REGIONS_TABLE_PATH_B=$(mktemp 2>&1)
+   REGIONS_TABLE_PATH=$(mktemp 2>&1)
+   BEDPATH=$(mktemp 2>&1)
+   GAPLESS_FA_MASKED_PATH=$(mktemp 2>&1)
+   
+   # make a table with genomic coordinates of each sequence regions and some other info
+   ALNFILEi=$(basename "$MAFi")
+   zcat -f $MAFi | awk -F'\t' -v x=$ALNFILEi '$1=="s"{print $2"\t"$3"\t"$4"\t"$5"\t"$6"\t"x}' | awk '{print $0"\t"$2+$3}' | sed 's|\(^[^.]*\)[.]\([^[:blank:]]*\)\t\([^[:blank:]]*\)\t\([^[:blank:]]*\)\t\([^[:blank:]]*\)\t\([^[:blank:]]*\)\t\([^[:blank:]]*\)\t\([^[:blank:]]*$\)|\1.\2\t\1\t\2\t\3\t\4\t\5\t\6\t\7\t\8\t\1-\2|g' | awk '{print $0"("$6")/"$4+1"-"$9+1"\tgene\t.\t0"}' | awk '{print $1"\t"$13"\t"$7"\t"$1"\t"$12"\t"$6"\t"$4"\t"$9"\t"$5"\t"$10"\t"$2"\t"$3"\t"$8"\t"$11}' > $REGIONS_TABLE_PATH_A
+   zcat -f $MAFi | awk '$1=="s"{print $2"("$5")/"$3+1"-"$3+$4+1}' > $REGIONS_TABLE_PATH_B
+   paste $REGIONS_TABLE_PATH_A $REGIONS_TABLE_PATH_B > $REGIONS_TABLE_PATH
+   
+   # make a BED-format version of the table created in the previous step
+   awk '{print $1"\t"$3"\t"$6"\t"$7"\t"$8"\t"$15}' $REGIONS_TABLE_PATH | 
+       awk '$3=="-" { $7 = $2-$5 }1' | 
+       awk '$3=="-" { $8 = $2-$4 }1' | 
+       awk '$3=="+" { $7=$4 }1' | 
+       awk '$3=="+" { $8=$5 }1' |
+       awk '$7!=$8{print $1"\t"$7"\t"$8"\t"$6"\t.\t"$3}' > $BEDPATH
+   
+   # extract BED intervals from $GENOMES_PATH containing masked-versions of sequences spanning the same regions as in $MAFi (but without gaps)
+   bedtools getfasta -s -nameOnly -fi $GENOMES_PATH -bed $BEDPATH | sed 's|[(][+-][)]$||g' > $GAPLESS_FA_MASKED_PATH
+   
+   # convert MAFi to fasta alignment
+   awk '$1=="s"{print ">"$2"("$5")/"$3+1"-"$3+$4+1"\n"$7}' $MAFi > $ALN_FA_UNMASKED_PATH
+   
+   # Instead of extracting BED intervals from $GENOMES_PATH, may be able to generate $GAPLESS_FA_MASKED_PATH this way:
+   # (1) remove gaps from $ALN_FA_UNMASKED_PATH and save as $GAPLESS_FA_UNMASKED_PATH
+   # (2) transform $BED_MASK to $BED_MASKi:
+   #       (2.1) Get intersection between $BED_MASK and subsequence features and save as $BEDxi_MASK
+   #       (2.2) transform $BEDxi_MASK from chromosomal coordinates to subsequence coordinates and save as $BED_MASKi
+   # (3) apply masking to ungapped subsequences:
+   #     bedtools maskfasta -fi $GAPLESS_FA_UNMASKED_PATH -fo $GAPLESS_FA_MASKED_PATH -bed $BED_MASKi
+
+   # For each sequence in $ALN_FA_UNMASKED_PATH, replace non-gap sites with corresponding replacement sequence in $GAPLESS_FA_MASKED_PATH
+   Rscript $MASK_ALIGNMENT_RSCRIPT $ALN_FA_UNMASKED_PATH $GAPLESS_FA_MASKED_PATH $FAi $R_PACKAGES_DIR
+   echo "masked alignment written to: "$FAi
+   
+   ### remove temporary files
+   rm $ALN_FA_UNMASKED_PATH
+   rm $REGIONS_TABLE_PATH_A
+   rm $REGIONS_TABLE_PATH_B
+   rm $REGIONS_TABLE_PATH
+   rm $BEDPATH
+   rm $GAPLESS_FA_MASKED_PATH
+   
+   module unload R/R-4.0.2
+   module unload Bedtools/bedtools-2.29.2
+done
+
+##################################################################### mask-alignment.R
 
 ```
+- implemented in batch-mask-alignment.sh and mask-alignment.sh and mask-alignment.R
 
+-->
+
+<!--
 Convert mafs to fasta
 
 ```
+-->
 
-
+<!--
 ```
-
 Infer gene tree for each locus with each alignment block as a separate partition
 
 ```
+-->
 
+
+<!--
 
 ```
+-->
+
+
+
+
+
+
+
+
+
 
