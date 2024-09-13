@@ -233,6 +233,9 @@ do
    done
 done
 
+# remove temporary file
+rm $MAFs
+
 ```
 
 Sequence-specific alignment masking (if necessary)
