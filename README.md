@@ -121,7 +121,7 @@ REFERENCE_GENOME_NAME=Pantherophis-alleghaniensis-PanAll1
 WINDOWS_BED_PATH=Pantherophis-alleghaniensis-PanAll1_10kb-windows.bed
 
 # directory where window alignments should be saved
-OUTPUT_DIR=~/windows-10kb_scaffolds-softmasked_repeats-softmasked/
+OUTPUT_DIR=~/windows-10kb_scaffolds-softmasked_repeats-softmasked_MAF/
 
 # window widths in base pairs
 WINDOW_SIZE=10000
@@ -165,6 +165,94 @@ do
 done
 ```
 
+Locus alignments can contain one or more discontiguous subregion alignments (alignment blocks).
+
+The next step extracts and writes each block to a separate MAF in a locus-specific folder.
+
+Example input/output file structure
+
+- /loci_MAF/
+  - locus1.maf (with 3 discontiguous alignment blocks)
+  - locus2.maf (with 1 alignment block)
+  - locus3.maf (with 2 discontiguous alignment blocks)
+
+- /loci_MAF_region-blocks/
+  - locus1/
+   - locus1_block1.maf
+   - locus1_block2.maf
+   - locus1_block3.maf
+  - locus2/
+   - locus2_block1.maf
+  - locus3/
+   - locus3_block1.maf
+   - locus3_block2.maf
+
+```
+# directory with locus maf alignments (input files)
+MAF_DIR_IN=/windows-10kb_scaffolds-softmasked_repeats-softmasked_MAF/
+
+# base output directory where subdirectories should be created holding alignment blocks for input locus alignments
+MAF_BASEDIR_OUT=/windows-10kb_scaffolds-softmasked_repeats-softmasked_MAF_region-blocks/
+
+# create temporary file with paths to input files in $MAF_DIR_IN
+MAFs=$(mktemp 2>&1)
+find $MAF_DIR_IN -type f > $MAFs
+
+# number of loci
+NLOCI=$(wc -l $MAFs | awk '{print $1}')
+
+# set imax to a small number to test on a few loci
+imin=1 
+imax=$NLOCI
+
+for i in $(seq $imin $imax);
+do
+   # input path to ith locus alignment
+   MAFi=$(sed "${i}q;d" $MAFs)
+   
+   # current locus name (filename)
+   REGIONi=$(basename $MAFi | sed -e 's|.maf$||g')
+
+   # output directory for $MAFi alignment blocks
+   OUTDIRi=$(echo $MAF_BASEDIR_OUT"/"$REGIONi)"/"
+   mkdir -p $OUTDIRi
+
+   # two-column table with $MAFi line ranges for alignment blocks
+   BLOCK_STARTS=$(grep -n ^a $MAFi | cut -f1 -d:)
+   FILE_END=$(wc -l $MAFi | awk '{print $1}')
+   BLOCK_ENDS=$(cat <(echo "$BLOCK_STARTS" | awk 'NR>1{print $1 - 1}') <(echo "$FILE_END"))
+   
+   NBLOCKS_MAFi=$(echo "$BLOCK_STARTS" | wc -l)
+   for j in $(seq 1 $NBLOCKS_MAFi);
+   do
+      BLOCK_STARTij=$(echo "$BLOCK_STARTS" | sed "${j}q;d")
+      BLOCK_ENDij=$(echo "$BLOCK_ENDS" | sed "${j}q;d")
+      BLOCKij_PATH=$OUTDIRi"/"$REGIONi"_block"$j".maf"
+      echo $i" "$j
+      [[ ! -f "$BLOCKij_PATH" ]] && sed -n "${BLOCK_STARTij},${BLOCK_ENDij}p;${BLOCK_ENDij}q" "$MAFi" > $BLOCKij_PATH
+   done
+done
+
+```
+
+Sequence-specific alignment masking (if necessary)
+
+```
 
 
+```
+
+Convert mafs to fasta
+
+```
+
+
+```
+
+Infer gene tree for each locus with each alignment block as a separate partition
+
+```
+
+
+```
 
