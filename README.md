@@ -252,7 +252,7 @@ HAL=lamps_genomes58_alignment_final.hal
 BED_CONFIG_PATH=
 
 # where to save masked-versions of unaligned genomes extracted from HAL (combined in a single fasta file)
-GENOMES_PATH=${HAL}-masked-nogaps.fa
+GENOMES_PATH=lamps_genomes58_masked-nogaps.fa
 
 # names of all genomes in the HAL
 GENOME_NAMES=$(halStats --genomes "$HAL" | sed 's| |\n|g' | sort)
@@ -320,7 +320,7 @@ Requires:
 # module load Bedtools/bedtools-2.29.2
 
 # path to fasta with all hardmasked, unaligned genomes (input file)
-GENOMES_PATH=
+GENOMES_PATH=lamps_genomes58_masked-nogaps.fa
 
 # where your R packages are installed
 R_PACKAGES_DIR=
@@ -336,7 +336,7 @@ MAFs=$(mktemp 2>&1)
 find $MAF_DIR_IN -type f > $MAFs
 
 # output directory where masked fasta alignments should be saved
-ALN_FA_DIR_OUT=
+ALN_FA_DIR_OUT=/genes_scaffolds-softmasked_repeats-softmasked_fasta_region-blocks/
 
 # first alignment to process
 imin=1
