@@ -241,25 +241,25 @@ rm $MAFs
 
 Sequence-specific alignment masking (if necessary)
 
-Create a huge fasta file with masked versions of your unaligned genomes
+First, create a huge fasta file with masked versions of your unaligned genomes
+- requires HAL (v2.1 tested) and bedtools (v2.29.2 tested)
 
 ```
-################################# mask-genomes.sh 
+# path to HAL alignment (input file)
+HAL=lamps_genomes58_alignment_final.hal
 
-#!/bin/sh
+# path to a two-column tab-separated file with each row containing genome name (column 1) and filepath to a BED file with intervals to mask in the genome (column 2).
+BED_CONFIG_PATH=
 
-# requires HAL (v2.1 tested) and bedtools (v2.29.2 tested)
-
-# path to settings.config
-SETTINGS_PATH=${1}
-
-# load settings (input/output paths) from settings.config 
-source $SETTINGS_PATH
+# where to save masked-versions of unaligned genomes extracted from HAL (combined in a single fasta file)
+GENOMES_PATH=${HAL}-masked-nogaps.fa
 
 # names of all genomes in the HAL
-GENOME_NAMES=$(halStats --genomes "$HAL_PATH" | sed 's| |\n|g' | sort)
+GENOME_NAMES=$(halStats --genomes "$HAL" | sed 's| |\n|g' | sort)
+
 # genome names excluding ancestral genomes
 GENOME_TIPNAMES=$(echo "$GENOME_NAMES" | grep -v '^Anc[0-9]*')
+
 # number of tip genomes
 NUMTIPGENOMES=$(echo "$GENOME_TIPNAMES" | wc -l)
  
@@ -268,38 +268,36 @@ NUMTIPGENOMES=$(echo "$GENOME_TIPNAMES" | wc -l)
 # (3) extract each genome and save to $GENOMES_PATH as fasta with UCSC format sequence names
 for i in $(seq 1 $NUMTIPGENOMES);
 do
-	GENOMEi=$(echo "$GENOME_TIPNAMES" | sed "${i}q;d")
-	echo $i $GENOMEi
+   GENOMEi=$(echo "$GENOME_TIPNAMES" | sed "${i}q;d")
+   echo $i $GENOMEi
 
- 	# test if any intervals to mask in $GENOMEi (0=false, 1=true)
-   	TEST_BEDPATHi=$(awk -v gen=$GENOMEi '$1==gen{print $1}' $BED_CONFIG_PATH | wc -w)
-	[[ "$TEST_BEDPATHi" -gt 1 ]] && echo "genome names in must be unique in "$BED_CONFIG_PATH && exit 1
-     
- 	# (1) add $GENOMEi BED intervals (if any) to $BED_PATH
-   	[[ "$TEST_BEDPATHi" -eq 0 ]] && BEDPATHi=""
-    	[[ "$TEST_BEDPATHi" -eq 1 ]] && BEDPATHi=$(awk -v gen=$GENOMEi '$1==gen{print $2}' $BED_CONFIG_PATH)
-	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ -f "$BEDPATHi" ]] && [[ -f "$BED_CONFIG_PATH" ]] && awk -v gen=$GENOMEi '{print gen"."$0}' $BEDPATHi > $BED_PATH
- 	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ -f "$BEDPATHi" ]] && [[ ! -f "$BED_CONFIG_PATH" ]] && awk -v gen=$GENOMEi '{print gen"."$0}' $BEDPATHi > $BED_PATH
+   # test if any intervals to mask in $GENOMEi (0=false, 1=true)
+   TEST_BEDPATHi=$(awk -v gen=$GENOMEi '$1==gen{print $1}' $BED_CONFIG_PATH | wc -w)
+   [[ "$TEST_BEDPATHi" -gt 1 ]] && echo "genome names in must be unique in "$BED_CONFIG_PATH && exit 1
+   
+   # (1) add $GENOMEi BED intervals (if any) to $BED_PATH
+   [[ "$TEST_BEDPATHi" -eq 0 ]] && BEDPATHi=""
+   [[ "$TEST_BEDPATHi" -eq 1 ]] && BEDPATHi=$(awk -v gen=$GENOMEi '$1==gen{print $2}' $BED_CONFIG_PATH)
+   [[ "$TEST_BEDPATHi" -eq 1 ]] && [[ -f "$BEDPATHi" ]] && [[ -f "$BED_CONFIG_PATH" ]] && awk -v gen=$GENOMEi '{print gen"."$0}' $BEDPATHi > $BED_PATH
+   [[ "$TEST_BEDPATHi" -eq 1 ]] && [[ -f "$BEDPATHi" ]] && [[ ! -f "$BED_CONFIG_PATH" ]] && awk -v gen=$GENOMEi '{print gen"."$0}' $BEDPATHi > $BED_PATH
 
- 	# (2) add $GENOMEi sequence names (genomeName.chromosomeName) and lengths to $CHROMLENGTHS_PATH
-   	[[ $i -eq 1 ]] && halStats --chromSizes $GENOMEi $HAL_PATH | awk -v gen=$GENOMEi '{print gen"."$0}' > $CHROMLENGTHS_PATH
-    	[[ $i -gt 1 ]] && halStats --chromSizes $GENOMEi $HAL_PATH | awk -v gen=$GENOMEi '{print gen"."$0}' >> $CHROMLENGTHS_PATH
+   # (2) add $GENOMEi sequence names (genomeName.chromosomeName) and lengths to $CHROMLENGTHS_PATH
+   [[ $i -eq 1 ]] && halStats --chromSizes $GENOMEi $HAL | awk -v gen=$GENOMEi '{print gen"."$0}' > $CHROMLENGTHS_PATH
+   [[ $i -gt 1 ]] && halStats --chromSizes $GENOMEi $HAL | awk -v gen=$GENOMEi '{print gen"."$0}' >> $CHROMLENGTHS_PATH
 
-     	# (3) mask $GENOMEi sequences and add to $GENOMES_PATH
- 	[[ "$TEST_BEDPATHi" -eq 0 ]] && [[ $i -eq 1 ]] && hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi > $GENOMES_PATH
-  	[[ "$TEST_BEDPATHi" -eq 0 ]] && [[ $i -gt 1 ]] && hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi >> $GENOMES_PATH
+   # (3) mask $GENOMEi sequences and add to $GENOMES_PATH
+   [[ "$TEST_BEDPATHi" -eq 0 ]] && [[ $i -eq 1 ]] && hal2fasta --ucscSequenceNames $HAL $GENOMEi > $GENOMES_PATH
+   [[ "$TEST_BEDPATHi" -eq 0 ]] && [[ $i -gt 1 ]] && hal2fasta --ucscSequenceNames $HAL $GENOMEi >> $GENOMES_PATH
 
-  	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ $i -eq 1 ]] && GENOMEi_TEMP_PATH=$(mktemp 2>&1) && 
-              bedtools maskfasta -fi <(hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi) -fo $GENOMEi_TEMP_PATH -bed $BED_PATH && 
+   [[ "$TEST_BEDPATHi" -eq 1 ]] && [[ $i -eq 1 ]] && GENOMEi_TEMP_PATH=$(mktemp 2>&1) && 
+              bedtools maskfasta -fi <(hal2fasta --ucscSequenceNames $HAL $GENOMEi) -fo $GENOMEi_TEMP_PATH -bed $BED_PATH && 
               cp "$GENOMEi_TEMP_PATH" $GENOMES_PATH && rm $GENOMEi_TEMP_PATH
 
-  	[[ "$TEST_BEDPATHi" -eq 1 ]] && [[ $i -gt 1 ]] && GENOMEi_TEMP_PATH=$(mktemp 2>&1) && 
-              bedtools maskfasta -fi <(hal2fasta --ucscSequenceNames $HAL_PATH $GENOMEi) -fo $GENOMEi_TEMP_PATH -bed $BED_PATH && 
+   [[ "$TEST_BEDPATHi" -eq 1 ]] && [[ $i -gt 1 ]] && GENOMEi_TEMP_PATH=$(mktemp 2>&1) && 
+              bedtools maskfasta -fi <(hal2fasta --ucscSequenceNames $HAL $GENOMEi) -fo $GENOMEi_TEMP_PATH -bed $BED_PATH && 
               cat "$GENOMEi_TEMP_PATH" >> $GENOMES_PATH && rm $GENOMEi_TEMP_PATH
 done
 ```
-- code is implemented here: [mask-genomes.sh](https://raw.githubusercontent.com/JeffWeinell/mask-alignment/main/current/mask-genomes.sh)
-
 
 <!--
 ````
