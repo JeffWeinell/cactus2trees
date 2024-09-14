@@ -190,10 +190,10 @@ Example input/output file structure
 
 ```
 # directory with locus maf alignments (input files)
-MAF_DIR_IN=/windows-10kb_scaffolds-softmasked_repeats-softmasked_MAF/
+MAF_DIR_IN=/genes_scaffolds-softmasked_repeats-softmasked_MAF/
 
 # base output directory where subdirectories should be created holding alignment blocks for input locus alignments
-MAF_BASEDIR_OUT=/windows-10kb_scaffolds-softmasked_repeats-softmasked_MAF_region-blocks/
+MAF_BASEDIR_OUT=/genes_scaffolds-softmasked_repeats-softmasked_MAF_region-blocks/
 
 # create temporary file with paths to input files in $MAF_DIR_IN
 MAFs=$(mktemp 2>&1)
@@ -299,10 +299,16 @@ do
 done
 ```
 
-<!--
-````
-############## updated version of batch-mask-alignment.sh that includes code from mask-alignment.sh
 
+Use the hardmasked unaligned genomes fasta (created in the previous step) to mask sites in your MAF locus alignments. Output alignments = fasta format.
+Requires:
+- bedtools (tested using version 2.29.2)
+- R (tested using version 4.0.2)
+- R packages dplyr, stringr, Biostrings, and GenomicRanges
+- this R script: [mask-alignment.R](https://raw.githubusercontent.com/JeffWeinell/mask-alignment/refs/heads/main/current/mask-alignment.R)
+
+
+```
 # NOTE: zero-length intervals in input MAF are always filtered
 
 ### In the future this script will use inputs \\
@@ -310,44 +316,49 @@ done
 # (2) MAF file generated from the HAL \\
 # (3) BED with intervals to mask in output alignment fasta
 
-module load R/R-4.0.2
-module load Bedtools/bedtools-2.29.2
+# module load R/R-4.0.2
+# module load Bedtools/bedtools-2.29.2
 
+# path to fasta with all hardmasked, unaligned genomes (input file)
 GENOMES_PATH=
+
+# where your R packages are installed
 R_PACKAGES_DIR=
+
+# path to your copy of R script mask-alignment.R
 MASK_ALIGNMENT_RSCRIPT=mask-alignment.R
 
-# file with names of input .maf files
-MAF_NAMES_FILE=genes_maf-filenames.txt
-
-# directory containing the .maf files listed in $MAF_NAMES_FILE
-MAF_DIR_IN=genes_scaffolds-softmasked_repeats-softmasked_MAF
+# directory containing input MAF files (including any in subdirectories)
+MAF_DIR_IN=/genes_scaffolds-softmasked_repeats-softmasked_MAF_region-blocks/
 
 # create temporary file with paths to input files in $MAF_DIR_IN
 MAFs=$(mktemp 2>&1)
 find $MAF_DIR_IN -type f > $MAFs
 
-# output directory where masked fasta alignments are written
+# output directory where masked fasta alignments should be saved
 ALN_FA_DIR_OUT=
 
-# first .maf in $MAF_NAMES_FILE to processes
-imin=
+# first alignment to process
+imin=1
 
-# last .maf in $MAF_NAMES_FILE to processes
-imax=
+# last alignment to process (default 0 to process from $imin to last alignment)
+imax=0
+
+# Number of alignments in input directory
+NUMLOCI=$(wc -l $MAFs | awk '{print $1}')
+
+# updates $imax
+[[ "$imax" -eq 0]] && imax=$NUMLOCI
+[[ "$imax" -gt "$NUMLOCI" ]] && imax=$NUMLOCI
 
 for i in $(seq $imin $imax);
 do
-   # MAFi=$(sed "${i}q;d" $MAF_NAMES_FILE)
-
    MAFi=$(sed "${i}q;d" $MAFs)
-   FAi=$(echo "$MAFi" | sed 's|.maf$|.fa|g')
+   FAi=$ALN_FA_DIR_OUT"/"$(basename "$MAFi" | sed 's|.maf$|.fa|g')
    
-   ALN_MAF_PATH=$MAFi
-   ALN_FAOUT_PATH=$FAi
 
-   ### exit if $ALN_FAOUT_PATH already exists
-   [[ -f "$ALN_FAOUT_PATH" ]] && echo "exiting because "$ALN_FAOUT_PATH" already exists" && exit 0
+   ### exit if $FAi already exists
+   [[ -f "$FAi" ]] && echo "exiting because "$FAi" already exists" && exit 0
    
    ### temporary files
    ALN_FA_UNMASKED_PATH=$(mktemp 2>&1)
@@ -377,7 +388,8 @@ do
    # convert MAFi to fasta alignment
    awk '$1=="s"{print ">"$2"("$5")/"$3+1"-"$3+$4+1"\n"$7}' $MAFi > $ALN_FA_UNMASKED_PATH
    
-   # Instead of extracting BED intervals from $GENOMES_PATH, may be able to generate $GAPLESS_FA_MASKED_PATH this way:
+   ### Idea for future faster version of code
+   # Instead of extracting BED intervals from $GENOMES_PATH, it may be able to generate $GAPLESS_FA_MASKED_PATH this way:
    # (1) remove gaps from $ALN_FA_UNMASKED_PATH and save as $GAPLESS_FA_UNMASKED_PATH
    # (2) transform $BED_MASK to $BED_MASKi:
    #       (2.1) Get intersection between $BED_MASK and subsequence features and save as $BEDxi_MASK
@@ -400,19 +412,15 @@ do
    module unload R/R-4.0.2
    module unload Bedtools/bedtools-2.29.2
 done
-
-##################################################################### mask-alignment.R
-
 ```
-- implemented in batch-mask-alignment.sh and mask-alignment.sh and mask-alignment.R
 
--->
+
 
 <!--
 Convert mafs to fasta
-
 ```
 -->
+
 
 <!--
 ```
