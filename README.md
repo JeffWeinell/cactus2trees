@@ -409,8 +409,8 @@ do
    rm $BEDPATH
    rm $GAPLESS_FA_MASKED_PATH
    
-   module unload R/R-4.0.2
-   module unload Bedtools/bedtools-2.29.2
+   # module unload R/R-4.0.2
+   # module unload Bedtools/bedtools-2.29.2
 done
 ```
 
