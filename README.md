@@ -208,6 +208,7 @@ imax=$NLOCI
 
 for i in $(seq $imin $imax);
 do
+   echo $i
    # input path to ith locus alignment
    MAFi=$(sed "${i}q;d" $MAFs)
    
@@ -229,7 +230,7 @@ do
       BLOCK_STARTij=$(echo "$BLOCK_STARTS" | sed "${j}q;d")
       BLOCK_ENDij=$(echo "$BLOCK_ENDS" | sed "${j}q;d")
       BLOCKij_PATH=$OUTDIRi"/"$REGIONi"_block"$j".maf"
-      echo $i" "$j
+      # echo $i" "$j
       [[ ! -f "$BLOCKij_PATH" ]] && sed -n "${BLOCK_STARTij},${BLOCK_ENDij}p;${BLOCK_ENDij}q" "$MAFi" > $BLOCKij_PATH
    done
 done
@@ -299,14 +300,12 @@ do
 done
 ```
 
-
 Use the hardmasked unaligned genomes fasta (created in the previous step) to mask sites in your MAF locus alignments. Output alignments = fasta format.
 Requires:
 - bedtools (tested using version 2.29.2)
 - R (tested using version 4.0.2)
 - R packages dplyr, stringr, Biostrings, and GenomicRanges
 - this R script: [mask-alignment.R](https://raw.githubusercontent.com/JeffWeinell/mask-alignment/refs/heads/main/current/mask-alignment.R)
-
 
 ```
 # NOTE: zero-length intervals in input MAF are always filtered
@@ -336,7 +335,8 @@ MAFs=$(mktemp 2>&1)
 find $MAF_DIR_IN -type f > $MAFs
 
 # output directory where masked fasta alignments should be saved
-ALN_FA_DIR_OUT=/genes_scaffolds-softmasked_repeats-softmasked_fasta_region-blocks/
+ALN_DIR_OUT=/genes_scaffolds-softmasked_repeats-softmasked_fasta_region-blocks/
+mkdir -p $ALN_DIR_OUT
 
 # first alignment to process
 imin=1
@@ -348,14 +348,13 @@ imax=0
 NUMLOCI=$(wc -l $MAFs | awk '{print $1}')
 
 # updates $imax
-[[ "$imax" -eq 0]] && imax=$NUMLOCI
+[[ "$imax" -eq 0 ]] && imax=$NUMLOCI
 [[ "$imax" -gt "$NUMLOCI" ]] && imax=$NUMLOCI
 
 for i in $(seq $imin $imax);
 do
    MAFi=$(sed "${i}q;d" $MAFs)
-   FAi=$ALN_FA_DIR_OUT"/"$(basename "$MAFi" | sed 's|.maf$|.fa|g')
-   
+   FAi=$ALN_DIR_OUT"/"$(basename "$MAFi" | sed 's|.maf$|.fa|g')
 
    ### exit if $FAi already exists
    [[ -f "$FAi" ]] && echo "exiting because "$FAi" already exists" && exit 0
