@@ -240,6 +240,7 @@ rm $MAFs
 
 ```
 
+<!--
 Sequence-specific alignment masking (if necessary)
 
 First, create a huge fasta file with masked versions of your unaligned genomes
@@ -412,16 +413,15 @@ do
    # module unload Bedtools/bedtools-2.29.2
 done
 ```
+-->
 
-<!--
 
-Alternate steps for masking (faster)
-- hardmask each alignment block MAF
-- sample names (=genome names in the Cactus SeqFile) must only include letters, numbers, and hyphens
-- output files = hardmasked MAFs
+
+Sequence-specific alignment masking (if necessary)
+- output files = MAF format
+- Note: this only works if your sample names (= genome names in the Cactus SeqFile) don't include a period '.' symbol
 
 ```
-
 # requires: bedtools, seqkit, sed, awk
 
 # directory with unmasked locus maf alignments (input files)
@@ -536,8 +536,6 @@ for i in $(seq 1 $NLOCI);
    rm $MAFs
 done
 ```
--->
-
 
 <!--
 Convert mafs to fasta
