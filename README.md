@@ -415,47 +415,13 @@ done
 
 <!--
 
-Alternate steps for masking
-- for each genome, create bed file with sites to mask (show method for generating this bed file from the vcf.gz produced in the last round of pseudo-it genome assembly).
-- create two column *bed.config file with genome names (= sample names) and paths to all masking beds
-- combine masking beds into a single file and use update chromosome names (column 1) to format 'sampleName.chrom'
-
-
-1. For each genome, create bed file with sites to mask (show method for generating this bed file from the vcf.gz produced in the last round of pseudo-it genome assembly).
+Alternate steps for masking (faster)
+- hardmask each alignment block MAF
+- sample names (=genome names in the Cactus SeqFile) must only include letters, numbers, and hyphens
+- output files = hardmasked MAFs
 
 ```
 
-
-```
-
-2. Create two column *bed.config file with genome names (= sample names) and paths to all masking beds (I did this manually).
-
-3. Combine masking beds into a single file and use update chromosome names (column 1) to format 'sampleName.chrom'
-
-```
-# input path to a two-column tab-separated file with each row containing genome name (column 1) and filepath (column 2) to a BED file with intervals to mask in the genome
-BED_CONFIG_PATH=lamps-bed.config
-
-# output path to bed file with chromosomal masking coordinates
-MASK_BED=lamps_58genomes_refsites.bed
-
-NUMGENOMES=$(wc -l $BED_CONFIG_PATH | awk '{print $1}')
-for i in $(seq 1 $NUMGENOMES);
-do
-   echo $i
-   GENOMEi_NAME=$(sed "{i}q;d" "$BED_CONFIG_PATH" | awk '{print $1}' )
-   GENOMEi_MASK_PATH=$(sed "{i}q;d" "$BED_CONFIG_PATH" | awk '{print $2}' )
-   [[ $i -eq 1 ]] && awk -v gn=$GENOMEi_NAME '{print gn"."$0}' $GENOMEi_MASK_PATH > $MASK_BED
-   [[ $i -gt 1 ]] && awk -v gn=$GENOMEi_NAME '{print gn"."$0}' $GENOMEi_MASK_PATH >> $MASK_BED
-done
-
-# gzip
-gzip -c $MASK_BED > $MASK_BED".gz"
-```
-
-hardmask each single-alignment MAF
-
-```
 # requires: bedtools, seqkit, sed, awk
 
 # directory with unmasked locus maf alignments (input files)
@@ -464,15 +430,18 @@ MAF_DIR_IN=/genes_scaffolds-softmasked_repeats-softmasked_MAF_region-blocks/
 # base output directory where subdirectories should be created holding alignment blocks for input locus alignments
 MAF_BASEDIR_OUT=/genes_scaffolds-hardmasked_repeats-softmasked_MAF_region-blocks/
 
-# bed file with all sites that should be masked
-MASK_BED=lamps_58genomes_refsites.bed.gz
+# input path to a two-column tab-separated file with each row containing genome name (column 1) and filepath (column 2) to a BED file with intervals to mask in the genome
+BED_CONFIG_PATH=/lamps-bedpaths.config
+
+# directory where tempfiles should be written
+DIR_TEMP=~/cactus/maf/temp/
 
 # process alignment i=imin to i=imax
 imin=1
 imax=0
 
 # create temporary file with paths to input files in $MAF_DIR_IN
-MAFs=$(mktemp 2>&1)
+MAFs=$(mktemp $DIR_TEMP"/tmp.XXXXXXX" 2>&1)
 find $MAF_DIR_IN -type f > $MAFs
 
 # create output directory if it doesnt already exist
@@ -488,37 +457,46 @@ NLOCI=$(wc -l $MAFs | awk '{print $1}')
 for i in $(seq 1 $NLOCI);
    # input path to ith locus alignment
    MAFi=$(sed "${i}q;d" $MAFs)
-   MAFi_out=$MAF_BASEDIR_OUT"/"$(basename $MAFi)
+   REGIONi=$(basename $MAFi | sed -E "s|_block[0-9]+.maf||g")
+   MAFi_DIR_OUT=$MAF_BASEDIR_OUT"/"$REGIONi
+   mkdir -p $MAFi_DIR_OUT
+   MAFi_out=$MAFi_DIR_OUT"/"$(basename $MAFi)
    echo "a" > $MAFi_out
 
    # bed coordinates of sequences in maf
-   LOCUSi_BED=$(awk -F'\t' '$1=="s"{print}' $MAFi | awk -F'\t' '{if ($5=="+") {print $2"\t"$3"\t"$3+$4"\t"$2"\t\.\t"$5} else {print $2"\t"$6-($3+$4)"\t"$6-$3"\t"$2"\t\.\t"$5}}')
-
-   # chromosomal coordinates to mask in ith locus (this takes a long time... need to do something else to filter this down)
-   INTXi=$(bedtools intersect -a "$MASK_BED" -b <(echo "$LOCUSi_BED"))
-   
-   ### would be faster if bed files were already split by species...
+   LOCUSi_BED=$(awk -F'\t' '$1=="s"{print}' $MAFi | awk -F'\t' '{if ($5=="+") {print $2"\t"$3"\t"$3+$4"\t"$2"\t.\t"$5} else {print $2"\t"$6-($3+$4)"\t"$6-$3"\t"$2"\t.\t"$5}}')
 
    # number of sequences in locus alignment (=nrows in $LOCUS_BED)
    NUMSEQS=$(echo "$LOCUSi_BED" | wc -l)
-   for j in $(seq 1 $NUMSEQS);
+   # for j in $(seq 1 $NUMSEQS);
+   for j in $(seq 11 $NUMSEQS);
    do
+      echo $i" "$j
       SEQij_BED=$(echo "$LOCUSi_BED" | sed "${j}q;d")
       SEQij_NAME=$(echo "$SEQij_BED" | awk '{print $1}')
-      INTXij=$(echo "$INTXi" | awk -v sn="$SEQij_NAME" '$1==sn{print}')
+      GENOMEij_NAME=$( echo "$SEQij_NAME" | sed -E "s|\..+||g" )
+      SEQij_CHROM=$( echo "$SEQij_NAME" | sed -E "s|^[^.]+\.||g")
       MAFij=$(awk -F'\t' -v sn="$SEQij_NAME" '$1=="s" && $2==sn{print}' $MAFi)
+      BEDPATHij=$(awk -v gn="$GENOMEij_NAME" '$1==gn{print $2}' $BED_CONFIG_PATH)
+      
+      # if nothing to mask in $SEQij_BED write $MAFij to $MAFi_out
+      [[ $(echo "$BEDPATHij" | wc -w) -eq 0 ]] && echo "yes" && echo "$MAFij" >> $MAFi_out && continue
+
+      # get mask features intersecting with $SEQij_BED
+      INTXij=$(bedtools intersect -a "$BEDPATHij" -b <(echo "$SEQij_BED" | awk -F'\t' -v chr=$SEQij_CHROM '{print chr"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6}'))
 
       # if nothing to mask in $SEQij_BED write $MAFij to $MAFi_out
       [[ $(echo "$INTXij" | wc -w) -eq 0 ]] && echo "yes" && echo "$MAFij" >> $MAFi_out && continue
-      
-      # if sites to hardmask in $SEQij_BED
+
+      # else if sites to mask in $SEQij_BED
       FAij=$(echo "$MAFij" | awk '$1=="s"{print ">"$2"\n"$7}')
       FAij_GAPLESS=$(echo "$FAij" | seqkit replace -p " |-" -s -w 0)
       SEQij_START=$(echo "$SEQij_BED" | awk '{print $2}')
-      BEDij=$(bedtools intersect -a <(echo "$INTXij") -b <(echo "$SEQij_BED") | awk -v st=$SEQij_START '{print $1"\t"$2-st"\t"$3-st}')
+      # BEDij=$(bedtools intersect -a <(echo "$INTXij") -b <(echo "$SEQij_BED") | awk -v st=$SEQij_START '{print $1"\t"$2-st"\t"$3-st}')
+      BEDij=$(echo "$INTXij" | awk -v sn="$SEQij_NAME" -v st=$SEQij_START '{print sn"\t"$2-st"\t"$3-st}')
       
       # apply masking to FAij_GAPLESS
-      FAij_OUTPATH=$(mktemp 2>&1)
+      FAij_OUTPATH=$(mktemp $DIR_TEMP"/tmp.XXXXXXX" 2>&1)
       bedtools maskfasta -fi <(echo "$FAij_GAPLESS") -fo $FAij_OUTPATH -bed <(echo "$BEDij")
       FAij_MASKED_GAPLESS=$(cat "$FAij_OUTPATH")
       rm $FAij_OUTPATH
@@ -544,7 +522,7 @@ for i in $(seq 1 $NLOCI);
       for k in $(seq 1 $NGAPS);
       do
          GAPk=$(echo "$GAPSITES" | sed "${k}q;d")
-         FAij_MASKED_GAPPED=$(echo "$FAij_MASKED_GAPPED" | seqkit mutate -i ${GAPk}:- -w 0)
+         FAij_MASKED_GAPPED=$(echo "$FAij_MASKED_GAPPED" | seqkit mutate -i ${GAPk}:- -w 0 --quiet)
       done
       
       # update MAFij with masked, gapped sequence and save to $MAFi_out
@@ -558,9 +536,7 @@ for i in $(seq 1 $NLOCI);
    rm $MAFs
 done
 ```
-
 -->
-
 
 
 <!--
